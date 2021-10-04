@@ -1,4 +1,6 @@
 # HM_SOS_TOT
 Harvest Moon - Story of Seasons Trio Of Towns Korean Translate Git
-# TODO
-Make xbb(PAPA flag) to csv converter
+
+
+# Warning
+`extract.py` cannot extract whole PAPA files, it can only extract text datas (from Msg.xbb)

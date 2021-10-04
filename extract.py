@@ -12,37 +12,86 @@ import json
 from xlsxwriter.workbook import Workbook
 import chardet
 
-USA = 0x02
-JPN = 0x03
 
-DECODE_TYPE = JPN
+def check_encoding(btext):
+    count = 0
+    for char in btext:
+        if int(char) == 0x0:
+            count += 1
+            continue
+        if int(char) >= 0x30 and int(char) <= 0x7E:
+            continue
+        else:
+            return "utf-16"
+    if count >= 4:
+        return "utf-16"
+    return "ascii"
+
+# def read_btext(f, start):
+#     btext = b""
+#     offset = 0
+#     while True:
+#         print(btext)
+#         f.seek(start + offset)
+#         check = f.read(2)
+#         # 1. 00 00 == end
+#         if check == b"\x00\x00":
+#             break
+#         # 2. if ascii == end
+#         elif int(check[0]) == 0x00:
+#             if len(btext) % 2 == 0:
+#                 encoding = check_encoding(btext)
+#                 if encoding == "ascii":
+#                     break
+#                 else:
+#                     btext += check[0].to_bytes(1, byteorder='little')
+#             else:
+#                 btext += check[0].to_bytes(1, byteorder='little')
+#         else:
+#             # print(check[0])
+#             btext += check[0].to_bytes(1, byteorder='little')
+#         offset += 1
+#     return btext
+
 
 def subfile(f, block, size):
     f.seek(block)
     blocksize = struct.unpack('<I', f.read(4))[0]
+    offsetcount = struct.unpack('<I', f.read(4))[0]
+    if offsetcount == 0x00:
+        return 0
+    else:
+        offsets = []
+        sizes = []
+        texts = []
+        for i in range(offsetcount):
+            offsets.append(struct.unpack('<I', f.read(4))[0])
+            if i != 0:
+                sizes.append(offsets[i] - offsets[i-1])
+        sizes.append(size - offsets[-1])
+        # print(sizes)
 
-    # USA == 0x02, JPN == 0x03
-    version = struct.unpack('<I', f.read(4))[0]
-    if version == 0x00:
-        return (0,0)
-    elif version == 0x02:
-        print(f"File {file} is USA version!")
-        print("For now, USA version is not supported. exit program.")
-        exit()
-    elif version == 0x03:
-        msgoffset = struct.unpack('<I', f.read(4))[0]
-        textoffset = struct.unpack('<I', f.read(4))[0]
-        labeloffset = struct.unpack('<I', f.read(4))[0]
+            
 
-        textsize = labeloffset - textoffset
-        labelsize = size - labeloffset
-
-        f.seek(block + textoffset)
-        text = f.read(textsize).decode("utf-16")
-
-        f.seek(block + labeloffset)
-        label = f.read(labelsize).decode("shift-jis")
-        return (text, label)
+        for (idx, offset) in enumerate(offsets):
+            # Exception Handling
+            text = b""
+            if offset < offsets[0]:
+                texts.append("None")
+                continue
+            # text = read_btext(f, block + offset)
+            text = f.read(sizes[idx])
+            print(sizes[idx])
+            print(text)
+            # Detect encoding, it may utf-16 or shift-jis
+            # encoding = chardet.detect(text)['encoding']
+            encoding = check_encoding(text)
+            if encoding == "ascii":
+                texts.append(text.decode("ascii"))
+            else:
+                texts.append(text.decode("utf-16"))
+            
+        return texts
     
 
 def extract(file):
@@ -73,18 +122,20 @@ def extract(file):
             else:
                 size = blockoffsets[i + 1] - blockoffsets[i]
             # print(f, hex(blockoffsets[i]), size)
-            text, label = subfile(f, blockoffsets[i], size)
-            if text == label == 0:
+            texts = subfile(f, blockoffsets[i], size)
+            
+            if texts == 0:
                 continue
             data = {
                 "idx" : i,
-                "label": label,
-                "text" : text,
             }
+            # input()
+            for i in range(len(texts)):
+                data[str(i)] = texts[i].replace("\u0000","")
             out_json.append(data)
             # out_json[label] = text
-            text_list.append(text)
-            label_list.append(label)
+            # text_list.append(text)
+            # label_list.append(label)
     with open(out_filename, 'w', encoding="utf-8") as f:
         f.write(json.dumps(out_json, indent=4 ,ensure_ascii=False))
                 
@@ -101,11 +152,9 @@ if __name__ == '__main__':
     abspath = os.path.abspath(sys.argv[1])
 
     if(os.path.isdir(abspath)):
-        # workbook = Workbook(abspath + '.xlsx')
         file_list = os.listdir(abspath)
         for file in file_list:
             filedir = str(abspath) + "\\" + str(file)
             extract(filedir)
-        # workbook.close()
     else:
         extract(sys.argv[1])
