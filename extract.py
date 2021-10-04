@@ -23,35 +23,10 @@ def check_encoding(btext):
             continue
         else:
             return "utf-16"
-    if count >= 4:
+    if count >= 5:
         return "utf-16"
     return "ascii"
 
-# def read_btext(f, start):
-#     btext = b""
-#     offset = 0
-#     while True:
-#         print(btext)
-#         f.seek(start + offset)
-#         check = f.read(2)
-#         # 1. 00 00 == end
-#         if check == b"\x00\x00":
-#             break
-#         # 2. if ascii == end
-#         elif int(check[0]) == 0x00:
-#             if len(btext) % 2 == 0:
-#                 encoding = check_encoding(btext)
-#                 if encoding == "ascii":
-#                     break
-#                 else:
-#                     btext += check[0].to_bytes(1, byteorder='little')
-#             else:
-#                 btext += check[0].to_bytes(1, byteorder='little')
-#         else:
-#             # print(check[0])
-#             btext += check[0].to_bytes(1, byteorder='little')
-#         offset += 1
-#     return btext
 
 
 def subfile(f, block, size):
@@ -59,7 +34,7 @@ def subfile(f, block, size):
     blocksize = struct.unpack('<I', f.read(4))[0]
     offsetcount = struct.unpack('<I', f.read(4))[0]
     if offsetcount == 0x00:
-        return 0
+        return (0, 0)
     else:
         offsets = []
         sizes = []
@@ -81,8 +56,6 @@ def subfile(f, block, size):
                 continue
             # text = read_btext(f, block + offset)
             text = f.read(sizes[idx])
-            print(sizes[idx])
-            print(text)
             # Detect encoding, it may utf-16 or shift-jis
             # encoding = chardet.detect(text)['encoding']
             encoding = check_encoding(text)
@@ -91,7 +64,7 @@ def subfile(f, block, size):
             else:
                 texts.append(text.decode("utf-16"))
             
-        return texts
+        return (offsets, texts)
     
 
 def extract(file):
@@ -122,12 +95,14 @@ def extract(file):
             else:
                 size = blockoffsets[i + 1] - blockoffsets[i]
             # print(f, hex(blockoffsets[i]), size)
-            texts = subfile(f, blockoffsets[i], size)
+            (offsets, texts) = subfile(f, blockoffsets[i], size)
             
             if texts == 0:
                 continue
+
             data = {
                 "idx" : i,
+                "offsets": offsets,
             }
             # input()
             for i in range(len(texts)):
