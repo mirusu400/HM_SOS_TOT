@@ -27,26 +27,37 @@ def check_encoding(btext):
         return "utf-16"
     return "ascii"
 
+def alt_read(f):
+    current_pos = f.tell()
+    buffer = b""
+    offset = 0
+    while True:
+        f.seek(current_pos + offset)
+        tbuf = f.read(2)
+        if tbuf == b"\x00\x00":
+            break
+        else:
+            buffer += tbuf[0].to_bytes(1, "little")
+            offset += 1
 
+    return buffer
 
 def subfile(f, block, size):
     f.seek(block)
     blocksize = struct.unpack('<I', f.read(4))[0]
     offsetcount = struct.unpack('<I', f.read(4))[0]
     if offsetcount == 0x00:
-        return (0, 0)
+        return (0, 0, 0)
     else:
         offsets = []
         sizes = []
+        encodings = []
         texts = []
         for i in range(offsetcount):
             offsets.append(struct.unpack('<I', f.read(4))[0])
             if i != 0:
                 sizes.append(offsets[i] - offsets[i-1])
         sizes.append(size - offsets[-1])
-        # print(sizes)
-
-            
 
         for (idx, offset) in enumerate(offsets):
             # Exception Handling
@@ -55,16 +66,24 @@ def subfile(f, block, size):
                 texts.append("None")
                 continue
             # text = read_btext(f, block + offset)
-            text = f.read(sizes[idx])
+            # Method #1. read using size..
+            f.seek(block + offset)
+            try:
+                text = f.read(sizes[idx])
+            # Method #2. read as you can
+            except:
+                text = alt_read(f)
             # Detect encoding, it may utf-16 or shift-jis
             # encoding = chardet.detect(text)['encoding']
             encoding = check_encoding(text)
             if encoding == "ascii":
                 texts.append(text.decode("ascii"))
+                encodings.append("ascii")
             else:
                 texts.append(text.decode("utf-16"))
+                encodings.append("utf-16")
             
-        return (offsets, texts)
+        return (offsets, texts, encodings)
     
 
 def extract(file):
@@ -88,14 +107,13 @@ def extract(file):
         for i in range(lensubfile):
             blockoffsets.append(struct.unpack('<I', f.read(4))[0])
 
-        
         for i in range(len(blockoffsets)):
             if i == len(blockoffsets) - 1:
                 size = os.path.getsize(file) - blockoffsets[i]
             else:
                 size = blockoffsets[i + 1] - blockoffsets[i]
             # print(f, hex(blockoffsets[i]), size)
-            (offsets, texts) = subfile(f, blockoffsets[i], size)
+            (offsets, texts, encodings) = subfile(f, blockoffsets[i], size)
             
             if texts == 0:
                 continue
@@ -107,6 +125,7 @@ def extract(file):
             # input()
             for i in range(len(texts)):
                 data[str(i)] = texts[i].replace("\u0000","")
+                data[f"{i}_enc"] = encodings[i]
             out_json.append(data)
             # out_json[label] = text
             # text_list.append(text)
@@ -130,6 +149,11 @@ if __name__ == '__main__':
         file_list = os.listdir(abspath)
         for file in file_list:
             filedir = str(abspath) + "\\" + str(file)
-            extract(filedir)
+            print(f"Trying {filedir}...")
+            try:
+                extract(filedir)
+            except:
+                print(f"Error trying {filedir} !!")
+                raise
     else:
         extract(sys.argv[1])

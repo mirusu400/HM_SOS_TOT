@@ -12,35 +12,57 @@ import json
 from xlsxwriter.workbook import Workbook
 import chardet
 import codecs
+def check_encoding(text):
+    for char in text:
+        if ord(char) > 0xFF:
+            return "utf-16"
+    return "ascii"
 
-USA = 0x02
-JPN = 0x03
-
-DECODE_TYPE = JPN
+def padding(_bytes):
+    _bytes += b"\x00"
+    while len(_bytes) % 4 != 0:
+        _bytes += b"\x00"
+    return _bytes
 
 def subfile(data):
-    btext = data["text"].encode("utf-16")
-    blabel = data["label"].encode("shift-jis")
-    bMsg = b"Msg\x00"
-    bom = codecs.BOM_UTF16_LE 
-    assert btext.startswith(bom) 
-    btext = btext[len(bom):]
-    while len(btext) % 4 != 0:
-        btext += b"\x00"
-    while len(blabel) % 4 != 0:
-        blabel += b"\x00"
-    blocksize = len(btext) + len(blabel) + len(bMsg) + 0x14
-    version = 0x03
-    offsetMsg = 0x14
-    offsetText = 0x14 + len(bMsg)
-    offsetLabel = offsetText + len(btext)
+    offsets = data["offsets"]
+    btexts = []
+    blength = 0
+    for i in range(len(offsets)):
+        text = data[str(i)]
+        encoding = data[f"{i}_enc"]
+        if text == "None":
+            btexts.append(b"")
+            blength += 0
+        if encoding == "utf-16":
+            btext = padding(text.encode("utf-16"))
+            # remove BOM
+            bom = codecs.BOM_UTF16_LE 
+            assert btext.startswith(bom) 
+            btext = btext[len(bom):]
+        else:
+            btext = padding(text.encode("ascii"))
+        btexts.append(btext)
+        blength += len(btext)
+    blocksize = (len(offsets) * 4) + blength + 0x8 # Header size
+    countoffsetheader = len(offsets)
     
-    b = struct.pack("<IIIII", blocksize, version, offsetMsg, offsetText, offsetLabel)
-    b += bMsg
-    b += btext
-    b += blabel
+    b = struct.pack("<II", blocksize, countoffsetheader)
+    boffset = offsets[0]
+    for i in range(len(offsets)):
+        # Exception handling: None of the text is set
+        if btexts[i] == "":
+            b += struct.pack("<I", offsets[i])
+        # Normal case
+        else:
+            b += struct.pack("<I", boffset)
+            boffset += len(btexts[i])
+    
+    for _ in btexts:
+        b += _
     return b
-    
+
+
 
 def _import(originalfile, jsonfile, outfile):
     bheader = b"PAPA"
