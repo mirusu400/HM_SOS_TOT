@@ -27,6 +27,8 @@ But you should unpack, using `Kerameru` which bundled in [Kuriimu](https://githu
 You can extract each xbb and get lots of raw datas, I'll call us `PAPA` files. (Because it has `PAPA` flag at the head of file.)
 
 ### 2-2. Convert PAPA file as JSON file
+Of course, you can edit `PAPA` files with [Kuriimu](https://github.com/IcySon55/Kuriimu), but I highly recomment use my tools. Kuriimu PAPA plugins are a bit unstable, and maybe not capatable for some PAPA files.
+
 Using `extract.py`, you can convert PAPA as JSON file. Just drag and drop original file/folder and automatically convert as JSON file.
 
 Modify extracted texts, but *YOU SHOULD NOT EDIT ascii ENCODED TEXTS.* if you modify these, games cannot recognize original texts. You only edit *UTF-16* sections.
